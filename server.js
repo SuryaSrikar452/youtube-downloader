@@ -354,18 +354,12 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
-      '-o', '-',
-      videoUrl
+      '-o', '-'
     ];
 
-    // Inject ffmpeg-static if available
-    if (ffmpegPath) {
-      args.push('--ffmpeg-location', ffmpegPath);
-    }
-    // Inject cookies if available
-    if (COOKIES_FILE_PATH) {
-      args.push('--cookies', COOKIES_FILE_PATH);
-    }
+    if (ffmpegPath) args.push('--ffmpeg-location', ffmpegPath);
+    if (COOKIES_FILE_PATH) args.push('--cookies', COOKIES_FILE_PATH);
+    args.push(videoUrl);
 
     console.log(`[Download] Starting audio stream for job ${slotStatus.queueId}. format: ${format}`);
     res.setHeader('Content-Type', contentType);
@@ -413,14 +407,14 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
     // MP4 needs the moov atom written at the end, so it cannot be piped to stdout directly.
     const tempPath = path.join(tempDir, `${tempId}.mp4`);
 
-    // Fail-safe format selector: picks best matching height, falls back to best available pre-merged or best format
-    let formatSelector = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best';
+    // Universal H.264 (avc1) codec selector for universal playback across Windows Media Player, iOS, and Android
+    let formatSelector = 'bestvideo[vcodec^=avc1][height<=720]+bestaudio/bestvideo[height<=720]+bestaudio/best[height<=720]/best';
     if (format === '1080p') {
-      formatSelector = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best';
+      formatSelector = 'bestvideo[vcodec^=avc1][height<=1080]+bestaudio/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best';
     } else if (format === '480p') {
-      formatSelector = 'bestvideo[height<=480]+bestaudio/best[height<=480]/best';
+      formatSelector = 'bestvideo[vcodec^=avc1][height<=480]+bestaudio/bestvideo[height<=480]+bestaudio/best[height<=480]/best';
     } else if (format === '360p') {
-      formatSelector = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best';
+      formatSelector = 'bestvideo[vcodec^=avc1][height<=360]+bestaudio/bestvideo[height<=360]+bestaudio/best[height<=360]/best';
     }
 
     args = [
@@ -431,18 +425,12 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
-      '-o', tempPath,
-      videoUrl
+      '-o', tempPath
     ];
 
-    // Inject ffmpeg-static if available
-    if (ffmpegPath) {
-      args.push('--ffmpeg-location', ffmpegPath);
-    }
-    // Inject cookies if available
-    if (COOKIES_FILE_PATH) {
-      args.push('--cookies', COOKIES_FILE_PATH);
-    }
+    if (ffmpegPath) args.push('--ffmpeg-location', ffmpegPath);
+    if (COOKIES_FILE_PATH) args.push('--cookies', COOKIES_FILE_PATH);
+    args.push(videoUrl);
 
     console.log(`[Download] Starting video download to temp file for job ${slotStatus.queueId}. format: ${format}`);
 
