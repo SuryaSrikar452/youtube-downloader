@@ -8,6 +8,7 @@ const binaries = require('./lib/binaries');
 const validate = require('./lib/validate');
 const infoCache = require('./lib/infoCache');
 const downloadQueue = require('./lib/downloadQueue');
+const ytEngine = require('./lib/ytEngine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
