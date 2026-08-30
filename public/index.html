@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamVault — YouTube & Shorts Downloader</title>
+  <meta name="description" content="Download YouTube and Shorts videos in high quality with true video-audio sync, instantly and completely ad-free.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Styling -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow layers -->
+  <div class="glow-bg">
+    <div class="glow-circle glow-blue"></div>
+    <div class="glow-circle glow-purple"></div>
+  </div>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <i class="fa-solid fa-cloud-arrow-down logo-icon animate-pulse"></i>
+        <h1>Stream<span>Vault</span></h1>
+      </div>
+      <p class="tagline">Premium YouTube & Shorts video engine</p>
+    </header>
+
+    <!-- Main Downloader Card -->
+    <main class="downloader-card">
+      <!-- Input Section -->
+      <div class="input-section">
+        <label for="url-input" class="input-label">Paste video or Shorts link</label>
+        <div class="input-wrapper">
+          <i class="fa-brands fa-youtube input-icon"></i>
+          <input 
+            type="text" 
+            id="url-input" 
+            placeholder="e.g., youtube.com/watch?v=... or youtube.com/shorts/..." 
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button id="clear-btn" class="clear-btn hidden" title="Clear input">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <p id="input-error" class="error-text hidden"></p>
+      </div>
+
+      <!-- General Server Error Display -->
+      <div id="error-card" class="error-card hidden">
+        <i class="fa-solid fa-circle-exclamation error-card-icon"></i>
+        <div class="error-card-content">
+          <h4>Something went wrong</h4>
+          <p id="error-message">Error explanation goes here.</p>
+        </div>
+      </div>
+
+      <!-- Skeleton Loading Screen -->
+      <div id="skeleton-loader" class="skeleton-container hidden">
+        <div class="skeleton-thumbnail"></div>
+        <div class="skeleton-details">
+          <div class="skeleton-line title-skeleton"></div>
+          <div class="skeleton-line author-skeleton"></div>
+          <div class="skeleton-line duration-skeleton"></div>
+          <div class="skeleton-options">
+            <div class="skeleton-button"></div>
+            <div class="skeleton-button"></div>
+            <div class="skeleton-button"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Card -->
+      <div id="result-card" class="result-container hidden">
+        <div class="video-thumbnail-wrapper">
+          <img id="video-thumbnail" src="" alt="Video Thumbnail">
+          <span id="video-duration" class="video-badge">00:00</span>
+        </div>
+        <div class="video-details">
+          <h2 id="video-title">YouTube Video Title</h2>
+          <p id="video-author"><i class="fa-solid fa-circle-check uploader-badge"></i> <span id="uploader-name">Channel Name</span></p>
+          
+          <!-- Download Buttons Section -->
+          <div class="download-section">
+            <h3>Select Quality</h3>
+            <div id="video-formats" class="formats-grid">
+              <!-- Dynamically populated video buttons -->
+            </div>
+            <div id="audio-formats" class="formats-grid">
+              <!-- Dynamically populated audio buttons -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Downloading Progress Container -->
+      <div id="progress-card" class="progress-card hidden">
+        <div class="progress-header">
+          <div class="progress-title-wrapper">
+            <i class="fa-solid fa-spinner fa-spin progress-loader"></i>
+            <div>
+              <h4 id="progress-status-text">Preparing download...</h4>
+              <p id="progress-format-label">1080p Full HD (MP4)</p>
+            </div>
+          </div>
+          <button id="cancel-btn" class="cancel-btn" title="Cancel Download">
+            <i class="fa-solid fa-ban"></i> Cancel
+          </button>
+        </div>
+        <div class="progress-bar-wrapper">
+          <div id="progress-bar" class="progress-bar-fill" style="width: 0%"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="progress-bytes">0.0 MB downloaded</span>
+          <span id="progress-percent">0%</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Recent Lookups Section -->
+    <section id="recent-section" class="recent-lookups hidden">
+      <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Lookups</h3>
+      <div id="recent-list" class="recent-grid">
+        <!-- Dynamically populated cards -->
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 StreamVault. Free, high-speed downloader. For personal use only.</p>
+    </footer>
+  </div>
+  
+  <script src="app.js"></script>
+</body>
+</html>
