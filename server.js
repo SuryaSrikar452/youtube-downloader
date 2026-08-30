@@ -158,7 +158,6 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const infoArgs = [
     '-j',
     '--no-playlist',
-    '--extractor-args', 'youtube:player_client=ios,web',
     '--geo-bypass',
     '--no-check-certificates',
     '--js-runtimes', 'node',
@@ -324,7 +323,6 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '-x', '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--no-playlist',
-      '--extractor-args', 'youtube:player_client=ios,web',
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
@@ -387,14 +385,14 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
     // MP4 needs the moov atom written at the end, so it cannot be piped to stdout directly.
     const tempPath = path.join(tempDir, `${tempId}.mp4`);
 
-    // Prefer H.264 (avc1) over AV1 for maximum device compatibility (especially mobile).
-    let formatSelector = 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]';
+    // Fail-safe format selector: picks best matching height, falls back to best available pre-merged or best format
+    let formatSelector = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best';
     if (format === '1080p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]';
+      formatSelector = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best';
     } else if (format === '480p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]';
+      formatSelector = 'bestvideo[height<=480]+bestaudio/best[height<=480]/best';
     } else if (format === '360p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=360]+bestaudio[ext=m4a]/bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]';
+      formatSelector = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best';
     }
 
     args = [
@@ -402,7 +400,6 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-playlist',
       '--no-part',
       '--merge-output-format', 'mp4',
-      '--extractor-args', 'youtube:player_client=ios,web',
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
