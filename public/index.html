@@ -18,6 +18,31 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Secure Password lock overlay -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-box">
+      <i class="fa-solid fa-lock login-icon animate-pulse"></i>
+      <h2>Engine Access Locked</h2>
+      <p>StreamVault is restricted. Please enter the access key to unlock the downloading engine.</p>
+      <form id="login-form">
+        <div class="password-input-wrapper">
+          <i class="fa-solid fa-key pass-icon"></i>
+          <input 
+            type="password" 
+            id="password-input" 
+            placeholder="Enter access key..." 
+            autocomplete="current-password"
+            required
+          >
+        </div>
+        <p id="login-error-msg" class="error-text hidden">Incorrect key. Access denied.</p>
+        <button type="submit" class="unlock-btn">
+          <i class="fa-solid fa-unlock-keyhole"></i> Unlock StreamVault
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Ambient background glow layers -->
   <div class="glow-bg">
     <div class="glow-circle glow-blue"></div>

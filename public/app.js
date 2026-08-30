@@ -153,6 +153,10 @@ async function fetchVideoInfo(url) {
     const res = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
     const data = await res.json();
 
+    if (res.status === 401) {
+      throw new Error('Unauthorized');
+    }
+
     if (!res.ok) {
       throw new Error(data.error || 'Failed to fetch video information.');
     }
@@ -161,8 +165,11 @@ async function fetchVideoInfo(url) {
     saveToRecentLookups(data);
   } catch (error) {
     resetUI();
-    errorMessage.innerText = error.message;
-    showElement(errorCard, true);
+    handleApiError(error);
+    if (!error.message.includes('Unauthorized')) {
+      errorMessage.innerText = error.message;
+      showElement(errorCard, true);
+    }
   } finally {
     showElement(skeletonLoader, false);
   }
@@ -248,6 +255,10 @@ async function pollDownloadQueue(formatId, formatLabel, ext) {
       return;
     }
 
+    if (res.status === 401) {
+      throw new Error('Unauthorized');
+    }
+
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Download failed with HTTP status ${res.status}`);
@@ -316,7 +327,10 @@ async function pollDownloadQueue(formatId, formatLabel, ext) {
       console.log('Download cancelled by user.');
     } else {
       console.error(error);
-      alert(error.message || 'An error occurred during the download.');
+      handleApiError(error);
+      if (!error.message.includes('Unauthorized')) {
+        alert(error.message || 'An error occurred during the download.');
+      }
       showElement(progressCard, false);
     }
     resetActiveDownloadState();
@@ -419,8 +433,72 @@ function renderRecentLookups() {
   showElement(recentSection, true);
 }
 
+// Authentication Handlers
+const loginOverlay = document.getElementById('login-overlay');
+const loginForm = document.getElementById('login-form');
+const passwordInput = document.getElementById('password-input');
+const loginErrorMsg = document.getElementById('login-error-msg');
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = passwordInput.value;
+  loginErrorMsg.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid password');
+    }
+
+    // Success: Animate unlock and focus input
+    loginOverlay.classList.add('fade-out');
+    renderRecentLookups();
+    setTimeout(() => {
+      urlInput.focus();
+    }, 500);
+
+  } catch (err) {
+    loginErrorMsg.innerText = err.message;
+    loginErrorMsg.classList.remove('hidden');
+    passwordInput.value = '';
+    passwordInput.focus();
+  }
+});
+
+// Check if any response is unauthorized (401) and show login screen
+function handleApiError(error) {
+  if (error.message.includes('401') || error.message.toLowerCase().includes('unauthorized')) {
+    loginOverlay.classList.remove('fade-out');
+    passwordInput.value = '';
+    passwordInput.focus();
+  }
+}
+
 // Initial rendering on page load
-window.addEventListener('DOMContentLoaded', () => {
-  renderRecentLookups();
-  urlInput.focus();
+window.addEventListener('DOMContentLoaded', async () => {
+  // Check session authorization status
+  try {
+    const res = await fetch('/api/auth-check');
+    const data = await res.json();
+
+    if (data.authenticated) {
+      loginOverlay.classList.add('fade-out');
+      renderRecentLookups();
+      urlInput.focus();
+    } else {
+      loginOverlay.classList.remove('fade-out');
+      passwordInput.focus();
+    }
+  } catch (err) {
+    console.error('Session verification failed:', err);
+    loginOverlay.classList.remove('fade-out');
+    passwordInput.focus();
+  }
 });

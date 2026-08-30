@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 const binaries = require('./lib/binaries');
 const validate = require('./lib/validate');
@@ -11,9 +12,74 @@ const downloadQueue = require('./lib/downloadQueue');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve frontend static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Security Setup: Dynamic startup secrets
+const SERVER_SECRET = crypto.randomBytes(32).toString('hex');
+const VALID_TOKEN = crypto.createHmac('sha256', SERVER_SECRET).update('jahnavireddy').digest('hex');
+
 app.use(express.json());
+
+// Helper to parse request cookies manually (saves installing dependency)
+function getCookie(req, name) {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+    const [key, ...val] = cookie.split('=');
+    acc[key.trim()] = decodeURIComponent(val.join('='));
+    return acc;
+  }, {});
+  return cookies[name] || null;
+}
+
+// Authentication Middleware to protect API routes
+function requireAuth(req, res, next) {
+  const token = getCookie(req, 'auth_token');
+  
+  // Timing-safe check to prevent validation timing attacks
+  if (token && token.length === VALID_TOKEN.length) {
+    const bufferA = Buffer.from(token);
+    const bufferB = Buffer.from(VALID_TOKEN);
+    if (crypto.timingSafeEqual(bufferA, bufferB)) {
+      return next();
+    }
+  }
+  
+  res.status(401).json({ error: 'Unauthorized access. Please log in.' });
+}
+
+// 1. Password Verification Endpoint
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'Password required' });
+  }
+
+  // Hash target safely for timing-safe check
+  const inputHash = crypto.createHmac('sha256', SERVER_SECRET).update(password).digest('hex');
+  const targetHash = crypto.createHmac('sha256', SERVER_SECRET).update('jahnavireddy').digest('hex');
+
+  if (crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(targetHash))) {
+    // Set a highly secure HTTPOnly cookie
+    res.setHeader('Set-Cookie', `auth_token=${VALID_TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 60 * 60}`);
+    return res.json({ success: true });
+  }
+
+  res.status(401).json({ error: 'Incorrect password.' });
+});
+
+// 2. Auth status check endpoint
+app.get('/api/auth-check', (req, res) => {
+  const token = getCookie(req, 'auth_token');
+  if (token && token.length === VALID_TOKEN.length) {
+    if (crypto.timingSafeEqual(Buffer.from(token), Buffer.from(VALID_TOKEN))) {
+      return res.json({ authenticated: true });
+    }
+  }
+  res.json({ authenticated: false });
+});
+
+// Serve frontend static files AFTER auth verification check (except index.html, JS/CSS assets)
+// We let express serve static files, but we shield the operational endpoints.
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Simple In-Memory Rate Limiter Middleware
 function rateLimit(limitCount, windowMs) {
@@ -41,8 +107,8 @@ function rateLimit(limitCount, windowMs) {
   };
 }
 
-// 1. Fetch Video Info Endpoint
-app.get('/api/info', rateLimit(20, 60 * 1000), async (req, res) => {
+// Protected Operational Endpoints
+app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => {
   const { url } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'URL parameter is required.' });
@@ -156,7 +222,7 @@ function getFriendlyError(stderr) {
 }
 
 // 2. Queue Status / Download Request Endpoint
-app.get('/api/download', rateLimit(10, 60 * 1000), async (req, res) => {
+app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res) => {
   const { videoId, format, queueId } = req.query;
 
   if (!videoId || !format) {

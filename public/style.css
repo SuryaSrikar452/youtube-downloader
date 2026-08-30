@@ -29,6 +29,158 @@
   --blur-glass: 20px;
 }
 
+/* Password protection login screen */
+.login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(8, 9, 14, 0.7);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.5s;
+}
+
+.login-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.login-box {
+  background: rgba(20, 24, 38, 0.65);
+  border: 1px solid var(--border-glass-hover);
+  border-radius: 28px;
+  padding: 2.5rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
+  animation: modalPop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.login-box h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, var(--secondary-glow), var(--primary-glow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-box p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 1.75rem;
+}
+
+.login-icon {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, var(--secondary-glow), var(--primary-glow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.pass-icon {
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+}
+
+#password-input {
+  width: 100%;
+  background: rgba(10, 12, 22, 0.8);
+  border: 1.5px solid var(--border-glass);
+  border-radius: 14px;
+  padding: 1.1rem 1.1rem 1.1rem 3rem;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  font-weight: 400;
+  transition: var(--transition-smooth);
+}
+
+#password-input:focus {
+  outline: none;
+  border-color: var(--primary-glow);
+  box-shadow: 0 0 0 3px rgba(232, 28, 255, 0.15);
+}
+
+.unlock-btn {
+  width: 100%;
+  background: linear-gradient(135deg, var(--secondary-glow), var(--primary-glow));
+  border: none;
+  border-radius: 14px;
+  padding: 1.1rem;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 8px 20px -6px rgba(232, 28, 255, 0.4);
+  transition: var(--transition-smooth);
+}
+
+.unlock-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px -4px rgba(232, 28, 255, 0.5);
+}
+
+.unlock-btn:active {
+  transform: translateY(0);
+}
+
+/* Mobile responsive login box */
+@media (max-width: 480px) {
+  .login-box {
+    padding: 1.75rem 1.5rem;
+    border-radius: 20px;
+  }
+  
+  .login-box h2 {
+    font-size: 1.35rem;
+  }
+  
+  .login-box p {
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+  
+  #password-input {
+    padding: 0.95rem 0.95rem 0.95rem 2.8rem;
+    font-size: 0.9rem;
+  }
+  
+  .unlock-btn {
+    padding: 0.95rem;
+    font-size: 0.9rem;
+  }
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-main);
