@@ -2,6 +2,7 @@ services:
   - type: web
     name: streamvault
     runtime: node
+    plan: free
     buildCommand: npm install
     startCommand: node server.js
     envVars:
