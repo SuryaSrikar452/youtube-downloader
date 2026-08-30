@@ -481,11 +481,20 @@ function handleApiError(error) {
   }
 }
 
-// ── Google Auth (OAuth2 Web Flow) ───────────────────────────────────────────
-const googleLoginBtn    = document.getElementById('google-login-btn');
-const googleStatusBadge = document.getElementById('google-status-badge');
-const googleLogoutBtn   = document.getElementById('google-logout-btn');
-const toast             = document.getElementById('toast');
+// ── Google Auth (Device Code Flow) ────────────────────────────────────────────
+const googleLoginBtn     = document.getElementById('google-login-btn');
+const googleStatusBadge  = document.getElementById('google-status-badge');
+const googleLogoutBtn    = document.getElementById('google-logout-btn');
+const googleModal        = document.getElementById('google-modal');
+const closeGoogleModal   = document.getElementById('close-google-modal');
+const startGoogleBtn     = document.getElementById('start-google-login-btn');
+const googleAuthSteps    = document.getElementById('google-auth-steps');
+const googleUserCode     = document.getElementById('google-user-code');
+const copyCodeBtn        = document.getElementById('copy-code-btn');
+const googleModalMsg     = document.getElementById('google-modal-msg');
+const toast              = document.getElementById('toast');
+
+let googlePollInterval = null;
 
 function showToast(message, type = 'success') {
   if (!toast) return;
@@ -506,7 +515,93 @@ async function checkGoogleAuthStatus() {
   }
 }
 
-// Logout button — unlinks Google account
+// Open modal
+if (googleLoginBtn) {
+  googleLoginBtn.addEventListener('click', () => {
+    googleModal.classList.remove('hidden');
+    googleAuthSteps.classList.add('hidden');
+    startGoogleBtn.classList.remove('hidden');
+    startGoogleBtn.disabled = false;
+    startGoogleBtn.innerHTML = '<i class="fa-brands fa-google"></i> Sign in with Google';
+    googleModalMsg.textContent = '';
+  });
+}
+
+// Close modal
+if (closeGoogleModal) {
+  closeGoogleModal.addEventListener('click', () => {
+    googleModal.classList.add('hidden');
+    if (googlePollInterval) clearInterval(googlePollInterval);
+  });
+}
+
+// Copy code button
+if (copyCodeBtn) {
+  copyCodeBtn.addEventListener('click', () => {
+    const code = googleUserCode.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      copyCodeBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+      setTimeout(() => { copyCodeBtn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
+    });
+  });
+}
+
+// Start device code sign-in
+if (startGoogleBtn) {
+  startGoogleBtn.addEventListener('click', async () => {
+    startGoogleBtn.disabled = true;
+    startGoogleBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting...';
+    googleModalMsg.textContent = '';
+
+    try {
+      const res = await fetch('/api/auth/google-start', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Failed to start sign-in.');
+
+      if (data.status === 'already_authenticated') {
+        googleModalMsg.textContent = '✅ Already connected!';
+        checkGoogleAuthStatus();
+        setTimeout(() => googleModal.classList.add('hidden'), 1200);
+        return;
+      }
+
+      if (data.user_code && data.verification_url) {
+        // Show code and auto-open Google's device page
+        googleUserCode.textContent = data.user_code;
+        googleAuthSteps.classList.remove('hidden');
+        startGoogleBtn.classList.add('hidden');
+        googleModalMsg.textContent = 'Waiting for you to approve on Google…';
+
+        // Auto-open google.com/device in new tab
+        window.open(data.verification_url, '_blank', 'noopener');
+
+        // Poll for completion every 3s
+        if (googlePollInterval) clearInterval(googlePollInterval);
+        googlePollInterval = setInterval(async () => {
+          try {
+            const s = await fetch('/api/auth/google-status');
+            if (!s.ok) return;
+            const { isLoggedIn } = await s.json();
+            if (isLoggedIn) {
+              clearInterval(googlePollInterval);
+              googleModalMsg.textContent = '';
+              googleModal.classList.add('hidden');
+              checkGoogleAuthStatus();
+              showToast('✅ Google account connected! Age-restricted videos will now download.', 'success');
+            }
+          } catch {}
+        }, 3000);
+      }
+    } catch (err) {
+      googleModalMsg.textContent = err.message;
+      startGoogleBtn.disabled = false;
+      startGoogleBtn.innerHTML = '<i class="fa-brands fa-google"></i> Sign in with Google';
+    }
+  });
+}
+
+// Logout
 if (googleLogoutBtn) {
   googleLogoutBtn.addEventListener('click', async () => {
     await fetch('/api/auth/google-logout', { method: 'POST' });
@@ -517,20 +612,6 @@ if (googleLogoutBtn) {
 
 // Initial rendering on page load
 window.addEventListener('DOMContentLoaded', async () => {
-  // Handle Google OAuth callback result in URL
-  const params = new URLSearchParams(window.location.search);
-  if (params.has('google_auth')) {
-    // Clean URL without reloading
-    window.history.replaceState({}, document.title, '/');
-    if (params.get('google_auth') === 'success') {
-      showToast('✅ Google account connected! Age-restricted videos will now download.', 'success');
-    } else {
-      const reason = params.get('reason') || 'Unknown error';
-      showToast(`❌ Google sign-in failed: ${reason}`, 'error');
-    }
-  }
-
-  // Check session authorization status
   try {
     const res = await fetch('/api/auth-check');
     const data = await res.json();

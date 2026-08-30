@@ -144,9 +144,19 @@ app.get('/api/auth/google-status', requireAuth, (req, res) => {
 
 // Logout: unlink Google account
 app.post('/api/auth/google-logout', requireAuth, (req, res) => {
-  googleAuth.logout();
   ytEngine.resetInstance();
   res.json({ ok: true });
+});
+
+// Device OAuth: starts the TV device code flow (for age-restricted video auth)
+app.post('/api/auth/google-start', requireAuth, async (req, res) => {
+  try {
+    const data = await ytEngine.startGoogleLogin();
+    res.json(data);
+  } catch (err) {
+    console.error('[Google Device Auth Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to start Google sign-in.' });
+  }
 });
 
 // Serve frontend static files AFTER auth verification check (except index.html, JS/CSS assets)
