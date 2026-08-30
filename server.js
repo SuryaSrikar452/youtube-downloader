@@ -146,10 +146,10 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const infoArgs = [
     '-j',
     '--no-playlist',
-    '--extractor-args', 'youtube:player_client=android,web',
+    '--extractor-args', 'youtube:player_client=mweb,web_embedded',
     '--geo-bypass',
     '--no-check-certificates',
-    '--js-runtimes', 'nodejs',
+    '--js-runtimes', 'node',
   ];
   if (COOKIES_FILE_PATH) infoArgs.push('--cookies', COOKIES_FILE_PATH);
   infoArgs.push(videoUrl);
@@ -311,10 +311,10 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '-x', '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--no-playlist',
-      '--extractor-args', 'youtube:player_client=android,web',
+      '--extractor-args', 'youtube:player_client=mweb,web_embedded',
       '--geo-bypass',
       '--no-check-certificates',
-      '--js-runtimes', 'nodejs',
+      '--js-runtimes', 'node',
       '-o', '-',
       videoUrl
     ];
@@ -389,10 +389,10 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-playlist',
       '--no-part',
       '--merge-output-format', 'mp4',
-      '--extractor-args', 'youtube:player_client=android,web',
+      '--extractor-args', 'youtube:player_client=mweb,web_embedded',
       '--geo-bypass',
       '--no-check-certificates',
-      '--js-runtimes', 'nodejs',
+      '--js-runtimes', 'node',
       '-o', tempPath,
       videoUrl
     ];
