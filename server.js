@@ -13,13 +13,25 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Write YouTube cookies to a temp file if the env variable is set.
-// This is the most reliable way to bypass datacenter IP bot detection.
+// Supports both raw Netscape cookie text and Base64-encoded string for clean env variable storage.
 let COOKIES_FILE_PATH = null;
 if (process.env.YOUTUBE_COOKIES) {
   try {
+    let cookieContent = process.env.YOUTUBE_COOKIES.trim();
+    
+    // Auto-detect base64 string
+    if (!cookieContent.includes('\n') && !cookieContent.includes('\t') && cookieContent.length > 50 && /^[A-Za-z0-9+/=]+$/.test(cookieContent)) {
+      cookieContent = Buffer.from(cookieContent, 'base64').toString('utf8');
+    }
+
+    // Ensure Netscape cookie header exists
+    if (!cookieContent.startsWith('# Netscape HTTP Cookie File')) {
+      cookieContent = '# Netscape HTTP Cookie File\n' + cookieContent;
+    }
+
     COOKIES_FILE_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
-    fs.writeFileSync(COOKIES_FILE_PATH, process.env.YOUTUBE_COOKIES, 'utf8');
-    console.log('[Auth] YouTube cookies loaded from environment variable.');
+    fs.writeFileSync(COOKIES_FILE_PATH, cookieContent, 'utf8');
+    console.log('[Auth] YouTube cookies loaded and formatted successfully.');
   } catch (err) {
     console.error('[Auth] Failed to write cookies file:', err);
   }
