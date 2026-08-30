@@ -18,7 +18,7 @@ let COOKIES_FILE_PATH = null;
 if (process.env.YOUTUBE_COOKIES) {
   try {
     let cookieContent = process.env.YOUTUBE_COOKIES.trim();
-    
+
     // Auto-detect base64 string
     if (!cookieContent.includes('\n') && !cookieContent.includes('\t') && cookieContent.length > 50 && /^[A-Za-z0-9+/=]+$/.test(cookieContent)) {
       cookieContent = Buffer.from(cookieContent, 'base64').toString('utf8');
@@ -58,7 +58,7 @@ function getCookie(req, name) {
 // Authentication Middleware to protect API routes
 function requireAuth(req, res, next) {
   const token = getCookie(req, 'auth_token');
-  
+
   // Timing-safe check to prevent validation timing attacks
   if (token && token.length === VALID_TOKEN.length) {
     const bufferA = Buffer.from(token);
@@ -67,7 +67,7 @@ function requireAuth(req, res, next) {
       return next();
     }
   }
-  
+
   res.status(401).json({ error: 'Unauthorized access. Please log in.' });
 }
 
@@ -171,7 +171,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
           { id: 'mp3', label: 'MP3 Audio (Highest Quality)', ext: 'mp3', type: 'audio' }
         ]
       };
-      
+
       infoCache.set(videoId, responseData);
       console.log(`[oEmbed Success] Instant metadata returned for videoId: ${videoId}`);
       return res.json(responseData);
@@ -223,7 +223,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
 
     try {
       const info = JSON.parse(stdout);
-      
+
       const maxResolution = info.height || 720;
       const title = info.title || 'YouTube Video';
       const thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails.length ? info.thumbnails[info.thumbnails.length - 1].url : '');
@@ -232,7 +232,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
 
       // Define standard format options available to the client based on maxResolution
       const formats = [];
-      
+
       if (maxResolution >= 1080) {
         formats.push({ id: '1080p', label: '1080p Full HD (MP4)', ext: 'mp4', type: 'video' });
       }
@@ -282,7 +282,7 @@ function getFriendlyError(stderr) {
   if (err.includes('country') || err.includes('region')) {
     return 'This video is region-locked or unavailable in this country.';
   }
-  
+
   // Extract key error lines for diagnosis
   const cleanStderr = stderr.split('\n').filter(line => line.trim().length > 0).join(' | ');
   return `Could not retrieve video information. Error detail: ${cleanStderr || 'Unknown error'}`;
@@ -304,7 +304,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
 
   // Request a queue slot (polled by front-end)
   const slotStatus = downloadQueue.requestSlot(videoId, format, queueId);
-  
+
   if (slotStatus.status === 'queued') {
     return res.status(202).json({
       status: 'queued',
@@ -325,198 +325,28 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
     });
   }
 
-  // Start Download
-  const ytDlpPath = binaries.getYtDlpPath();
-  const ffmpegPath = binaries.getFfmpegPath();
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  // Start Download via Native youtubei.js Engine
   const cachedInfo = infoCache.get(videoId);
   const title = cachedInfo ? cachedInfo.title : 'video';
   const { ascii, utf8 } = validate.sanitizeFilename(title);
 
-  let args = [];
-  let contentType = 'video/mp4';
-  let ext = 'mp4';
+  const ext = format === 'mp3' ? 'mp3' : 'mp4';
+  const contentType = format === 'mp3' ? 'audio/mpeg' : 'video/mp4';
+  const asciiFilename = `${ascii}.${ext}`;
+  const utf8Filename = encodeURIComponent(`${utf8}.${ext}`);
 
-  // Create a unique temp file path for this download
-  const tempDir = os.tmpdir();
-  const tempId = `sv_${slotStatus.queueId}_${Date.now()}`;
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
 
-  if (format === 'mp3') {
-    contentType = 'audio/mpeg';
-    ext = 'mp3';
-    // Audio can still be piped directly to stdout
-    const tempPath = path.join(tempDir, `${tempId}.mp3`);
-    args = [
-      '-f', 'bestaudio',
-      '-x', '--audio-format', 'mp3',
-      '--audio-quality', '0',
-      '--no-playlist',
-      '--geo-bypass',
-      '--no-check-certificates',
-      '--js-runtimes', 'node',
-      '-o', '-'
-    ];
+  console.log(`[Download] Starting native youtubei.js stream for job ${slotStatus.queueId}. format: ${format}`);
 
-    if (ffmpegPath) args.push('--ffmpeg-location', ffmpegPath);
-    if (COOKIES_FILE_PATH) args.push('--cookies', COOKIES_FILE_PATH);
-    args.push(videoUrl);
-
-    console.log(`[Download] Starting audio stream for job ${slotStatus.queueId}. format: ${format}`);
-    res.setHeader('Content-Type', contentType);
-    const asciiFilename = `${ascii}.${ext}`;
-    const utf8Filename = encodeURIComponent(`${utf8}.${ext}`);
-    res.setHeader('Content-Disposition', `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
-
-    const child = spawn(ytDlpPath, args);
-    child.stdout.pipe(res);
-
-    child.stderr.on('data', (data) => {
-      const log = data.toString().trim();
-      if (log && !log.includes('[download]') && !log.includes('%')) {
-        console.log(`[Download stderr - ${slotStatus.queueId}]: ${log}`);
-      }
-    });
-
-    let finished = false;
-    const cleanupProcess = () => {
-      if (finished) return;
-      finished = true;
-      child.kill('SIGKILL');
-      downloadQueue.releaseSlot(slotStatus.queueId);
-      console.log(`[Download] Job ${slotStatus.queueId} process killed and slot released.`);
-    };
-
-    req.on('close', () => {
-      console.log(`[Download] Client connection closed prematurely for job ${slotStatus.queueId}.`);
-      cleanupProcess();
-    });
-
-    child.on('close', (code) => {
-      if (code !== 0 && !finished) {
-        console.error(`[Download] yt-dlp child process exited with code ${code} for job ${slotStatus.queueId}`);
-      }
-      cleanupProcess();
-    });
-
-    child.on('error', (err) => {
-      console.error(`[Download] Child process error for job ${slotStatus.queueId}:`, err);
-      cleanupProcess();
-    });
-  } else {
-    // VIDEO downloads: write to temp file as MP4 (requires seekable output), then stream to client.
-    // MP4 needs the moov atom written at the end, so it cannot be piped to stdout directly.
-    const tempPath = path.join(tempDir, `${tempId}.mp4`);
-
-    // Universal H.264 (avc1) codec selector for universal playback across Windows Media Player, iOS, and Android
-    let formatSelector = 'bestvideo[vcodec^=avc1][height<=720]+bestaudio/bestvideo[height<=720]+bestaudio/best[height<=720]/best';
-    if (format === '1080p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=1080]+bestaudio/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best';
-    } else if (format === '480p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=480]+bestaudio/bestvideo[height<=480]+bestaudio/best[height<=480]/best';
-    } else if (format === '360p') {
-      formatSelector = 'bestvideo[vcodec^=avc1][height<=360]+bestaudio/bestvideo[height<=360]+bestaudio/best[height<=360]/best';
-    }
-
-    args = [
-      '-f', formatSelector,
-      '--no-playlist',
-      '--no-part',
-      '--merge-output-format', 'mp4',
-      '--geo-bypass',
-      '--no-check-certificates',
-      '--js-runtimes', 'node',
-      '-o', tempPath
-    ];
-
-    if (ffmpegPath) args.push('--ffmpeg-location', ffmpegPath);
-    if (COOKIES_FILE_PATH) args.push('--cookies', COOKIES_FILE_PATH);
-    args.push(videoUrl);
-
-    console.log(`[Download] Starting video download to temp file for job ${slotStatus.queueId}. format: ${format}`);
-
-    const child = spawn(ytDlpPath, args);
-    let finished = false;
-
-    // Cleanup helper: kill child process, delete temp file, release queue slot
-    const cleanupProcess = (deleteTemp = true) => {
-      if (finished) return;
-      finished = true;
-      child.kill('SIGKILL');
-      downloadQueue.releaseSlot(slotStatus.queueId);
-      if (deleteTemp) {
-        fs.unlink(tempPath, () => {}); // best-effort delete
-      }
-      console.log(`[Download] Job ${slotStatus.queueId} cleaned up.`);
-    };
-
-    child.stderr.on('data', (data) => {
-      const log = data.toString().trim();
-      if (log && !log.includes('[download]') && !log.includes('%')) {
-        console.log(`[Download stderr - ${slotStatus.queueId}]: ${log}`);
-      }
-    });
-
-    // If the client disconnects before yt-dlp finishes, abort
-    req.on('close', () => {
-      if (!finished) {
-        console.log(`[Download] Client disconnected during download for job ${slotStatus.queueId}.`);
-        cleanupProcess(true);
-      }
-    });
-
-    child.on('error', (err) => {
-      console.error(`[Download] Child process error for job ${slotStatus.queueId}:`, err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Download process failed to start.' });
-      }
-      cleanupProcess(true);
-    });
-
-    child.on('close', (code) => {
-      if (finished) return;
-
-      if (code !== 0) {
-        console.error(`[Download] yt-dlp exited with code ${code} for job ${slotStatus.queueId}`);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'Video download failed. Please try again.' });
-        }
-        cleanupProcess(true);
-        return;
-      }
-
-      // yt-dlp finished successfully — stream the temp MP4 file to the client
-      try {
-        const stat = fs.statSync(tempPath);
-        const asciiFilename = `${ascii}.${ext}`;
-        const utf8Filename = encodeURIComponent(`${utf8}.${ext}`);
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', stat.size);
-        res.setHeader('Content-Disposition', `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
-
-        const fileStream = fs.createReadStream(tempPath);
-        fileStream.pipe(res);
-
-        fileStream.on('end', () => {
-          finished = true;
-          downloadQueue.releaseSlot(slotStatus.queueId);
-          // Delete the temp file after streaming
-          fs.unlink(tempPath, () => {});
-          console.log(`[Download] Job ${slotStatus.queueId} completed and temp file cleaned.`);
-        });
-
-        fileStream.on('error', (err) => {
-          console.error(`[Download] File stream error for job ${slotStatus.queueId}:`, err);
-          cleanupProcess(true);
-        });
-      } catch (err) {
-        console.error(`[Download] Failed to read temp file for job ${slotStatus.queueId}:`, err);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'Failed to prepare the downloaded file.' });
-        }
-        cleanupProcess(true);
-      }
-    });
+  try {
+    await ytEngine.downloadStream(videoId, format, res);
+  } catch (err) {
+    console.error(`[Download Error - ${slotStatus.queueId}]:`, err);
+  } finally {
+    downloadQueue.releaseSlot(slotStatus.queueId);
+    console.log(`[Download] Job ${slotStatus.queueId} completed and slot released.`);
   }
 });
 
