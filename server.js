@@ -149,6 +149,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     '--extractor-args', 'youtube:player_client=tv,web_safari',
     '--geo-bypass',
     '--no-check-certificates',
+    '--js-runtimes', 'nodejs',
   ];
   if (COOKIES_FILE_PATH) infoArgs.push('--cookies', COOKIES_FILE_PATH);
   infoArgs.push(videoUrl);
@@ -308,6 +309,9 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--audio-quality', '0',
       '--no-playlist',
       '--extractor-args', 'youtube:player_client=tv,web_safari',
+      '--geo-bypass',
+      '--no-check-certificates',
+      '--js-runtimes', 'nodejs',
       '-o', '-',
       videoUrl
     ];
@@ -383,6 +387,9 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-part',
       '--merge-output-format', 'mp4',
       '--extractor-args', 'youtube:player_client=tv,web_safari',
+      '--geo-bypass',
+      '--no-check-certificates',
+      '--js-runtimes', 'nodejs',
       '-o', tempPath,
       videoUrl
     ];
