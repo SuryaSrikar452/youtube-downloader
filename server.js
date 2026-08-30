@@ -242,7 +242,10 @@ function getFriendlyError(stderr) {
   if (err.includes('country') || err.includes('region')) {
     return 'This video is region-locked or unavailable in this country.';
   }
-  return 'Could not retrieve video information. Please make sure the URL is correct.';
+  
+  // Extract key error lines for diagnosis
+  const cleanStderr = stderr.split('\n').filter(line => line.trim().length > 0).join(' | ');
+  return `Could not retrieve video information. Error detail: ${cleanStderr || 'Unknown error'}`;
 }
 
 // 2. Queue Status / Download Request Endpoint
