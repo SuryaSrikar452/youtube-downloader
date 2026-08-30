@@ -310,10 +310,13 @@ async function pollDownloadQueue(formatId, formatLabel, ext) {
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = filename;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    a.remove();
-    URL.revokeObjectURL(downloadUrl);
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(downloadUrl);
+    }, 2000);
 
     // Complete UI State
     progressStatusText.innerText = 'Download complete!';
