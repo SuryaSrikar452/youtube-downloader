@@ -133,7 +133,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const child = spawn(ytDlpPath, [
     '-j', 
     '--no-playlist', 
-    '--extractor-args', 'youtube:player_client=ios,android,web_creator',
+    '--extractor-args', 'youtube:player_client=tv,web_safari',
     videoUrl
   ]);
 
@@ -289,7 +289,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '-x', '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--no-playlist',
-      '--extractor-args', 'youtube:player_client=ios,android,web_creator',
+      '--extractor-args', 'youtube:player_client=tv,web_safari',
       '-o', '-',
       videoUrl
     ];
@@ -360,7 +360,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-playlist',
       '--no-part',
       '--merge-output-format', 'mp4',
-      '--extractor-args', 'youtube:player_client=ios,android,web_creator',
+      '--extractor-args', 'youtube:player_client=tv,web_safari',
       '-o', tempPath,
       videoUrl
     ];
