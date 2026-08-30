@@ -147,6 +147,8 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     '-j',
     '--no-playlist',
     '--extractor-args', 'youtube:player_client=tv,web_safari',
+    '--geo-bypass',
+    '--no-check-certificates',
   ];
   if (COOKIES_FILE_PATH) infoArgs.push('--cookies', COOKIES_FILE_PATH);
   infoArgs.push(videoUrl);
@@ -173,6 +175,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
 
     if (code !== 0) {
       console.error(`[Fetch Info] yt-dlp error code ${code} for video ${videoId}`);
+      console.error(`[Fetch Info] stderr: ${stderr}`);
       const friendlyMessage = getFriendlyError(stderr);
       return res.status(500).json({ error: friendlyMessage });
     }
