@@ -481,6 +481,98 @@ function handleApiError(error) {
   }
 }
 
+// Google Auth Integration
+const googleLoginBtn = document.getElementById('google-login-btn');
+const googleStatusBadge = document.getElementById('google-status-badge');
+const googleModal = document.getElementById('google-modal');
+const closeGoogleModal = document.getElementById('close-google-modal');
+const startGoogleLoginBtn = document.getElementById('start-google-login-btn');
+const googleAuthSteps = document.getElementById('google-auth-steps');
+const googleUserCode = document.getElementById('google-user-code');
+const googleAuthLink = document.getElementById('google-auth-link');
+const googleModalMsg = document.getElementById('google-modal-msg');
+
+let googlePollInterval = null;
+
+async function checkGoogleAuthStatus() {
+  try {
+    const res = await fetch('/api/auth/google-status');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.isLoggedIn) {
+      googleLoginBtn.classList.add('hidden');
+      googleStatusBadge.classList.remove('hidden');
+      if (googlePollInterval) clearInterval(googlePollInterval);
+    } else {
+      googleLoginBtn.classList.remove('hidden');
+      googleStatusBadge.classList.add('hidden');
+    }
+  } catch (err) {
+    console.error('Google status check failed:', err);
+  }
+}
+
+if (googleLoginBtn) {
+  googleLoginBtn.addEventListener('click', () => {
+    googleModal.classList.remove('hidden');
+  });
+}
+
+if (closeGoogleModal) {
+  closeGoogleModal.addEventListener('click', () => {
+    googleModal.classList.add('hidden');
+  });
+}
+
+if (startGoogleLoginBtn) {
+  startGoogleLoginBtn.addEventListener('click', async () => {
+    startGoogleLoginBtn.disabled = true;
+    startGoogleLoginBtn.innerText = 'Connecting to Google...';
+    googleModalMsg.innerText = '';
+
+    try {
+      const res = await fetch('/api/auth/google-start', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Failed to start Google login.');
+
+      if (data.status === 'already_authenticated') {
+        googleModalMsg.innerText = 'Your Google Account is already connected!';
+        checkGoogleAuthStatus();
+        setTimeout(() => googleModal.classList.add('hidden'), 1500);
+        return;
+      }
+
+      if (data.user_code && data.verification_url) {
+        googleUserCode.innerText = data.user_code;
+        googleAuthLink.href = data.verification_url;
+        googleAuthSteps.classList.remove('hidden');
+        startGoogleLoginBtn.classList.add('hidden');
+        googleModalMsg.innerText = 'Waiting for you to complete sign-in on Google...';
+
+        // Poll for completion
+        if (googlePollInterval) clearInterval(googlePollInterval);
+        googlePollInterval = setInterval(async () => {
+          const statusRes = await fetch('/api/auth/google-status');
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            if (statusData.isLoggedIn) {
+              clearInterval(googlePollInterval);
+              googleModalMsg.innerText = '🎉 Google Account Connected Successfully!';
+              checkGoogleAuthStatus();
+              setTimeout(() => googleModal.classList.add('hidden'), 2000);
+            }
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      googleModalMsg.innerText = err.message;
+      startGoogleLoginBtn.disabled = false;
+      startGoogleLoginBtn.innerText = 'Generate Device Login Code';
+    }
+  });
+}
+
 // Initial rendering on page load
 window.addEventListener('DOMContentLoaded', async () => {
   // Check session authorization status
@@ -491,6 +583,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (data.authenticated) {
       loginOverlay.classList.add('fade-out');
       renderRecentLookups();
+      checkGoogleAuthStatus();
       urlInput.focus();
     } else {
       loginOverlay.classList.remove('fade-out');

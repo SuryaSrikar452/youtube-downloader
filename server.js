@@ -103,6 +103,26 @@ app.get('/api/auth-check', (req, res) => {
   res.json({ authenticated: false });
 });
 
+// 3. Google Device Login Endpoints
+app.post('/api/auth/google-start', requireAuth, async (req, res) => {
+  try {
+    const data = await ytEngine.startGoogleLogin();
+    res.json(data);
+  } catch (err) {
+    console.error('[Google Login Start Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to start Google login.' });
+  }
+});
+
+app.get('/api/auth/google-status', requireAuth, async (req, res) => {
+  try {
+    const status = await ytEngine.getGoogleStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve frontend static files AFTER auth verification check (except index.html, JS/CSS assets)
 // We let express serve static files, but we shield the operational endpoints.
 app.use(express.static(path.join(__dirname, 'public')));
