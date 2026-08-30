@@ -158,7 +158,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const infoArgs = [
     '-j',
     '--no-playlist',
-    '--extractor-args', 'youtube:player_client=mweb,web_embedded',
+    '--extractor-args', 'youtube:player_client=ios,web',
     '--geo-bypass',
     '--no-check-certificates',
     '--js-runtimes', 'node',
@@ -185,6 +185,7 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
 
   child.on('close', (code) => {
     clearTimeout(timeoutId);
+    if (res.headersSent) return;
 
     if (code !== 0) {
       console.error(`[Fetch Info] yt-dlp error code ${code} for video ${videoId}`);
@@ -323,7 +324,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '-x', '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--no-playlist',
-      '--extractor-args', 'youtube:player_client=mweb,web_embedded',
+      '--extractor-args', 'youtube:player_client=ios,web',
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
@@ -401,7 +402,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-playlist',
       '--no-part',
       '--merge-output-format', 'mp4',
-      '--extractor-args', 'youtube:player_client=mweb,web_embedded',
+      '--extractor-args', 'youtube:player_client=ios,web',
       '--geo-bypass',
       '--no-check-certificates',
       '--js-runtimes', 'node',
