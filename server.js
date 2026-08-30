@@ -151,9 +151,37 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     return res.json(cachedData);
   }
 
-  const ytDlpPath = binaries.getYtDlpPath();
+  // 1. Fast Path: Use YouTube's official oEmbed API (100ms response, zero bot checks/timeouts)
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  try {
+    const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
+    if (oembedRes.ok) {
+      const oembedData = await oembedRes.json();
+      const responseData = {
+        videoId,
+        title: oembedData.title || 'YouTube Video',
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        duration: 0,
+        uploader: oembedData.author_name || 'YouTube Creator',
+        formats: [
+          { id: '1080p', label: '1080p Full HD (MP4)', ext: 'mp4', type: 'video' },
+          { id: '720p', label: '720p HD (MP4)', ext: 'mp4', type: 'video' },
+          { id: '480p', label: '480p (MP4)', ext: 'mp4', type: 'video' },
+          { id: '360p', label: '360p (MP4)', ext: 'mp4', type: 'video' },
+          { id: 'mp3', label: 'MP3 Audio (Highest Quality)', ext: 'mp3', type: 'audio' }
+        ]
+      };
+      
+      infoCache.set(videoId, responseData);
+      console.log(`[oEmbed Success] Instant metadata returned for videoId: ${videoId}`);
+      return res.json(responseData);
+    }
+  } catch (oembedErr) {
+    console.log(`[oEmbed Fallback] oEmbed failed, falling back to yt-dlp...`, oembedErr.message);
+  }
 
+  // 2. Slow Fallback: yt-dlp spawn
+  const ytDlpPath = binaries.getYtDlpPath();
   console.log(`[Fetch Info] Spawning yt-dlp to resolve metadata for: ${videoId}`);
   const infoArgs = [
     '-j',
