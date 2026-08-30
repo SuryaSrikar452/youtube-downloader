@@ -60,44 +60,18 @@
       
       <!-- Google Auth Status Bar -->
       <div id="google-auth-bar" class="google-auth-bar">
-        <button id="google-login-btn" class="google-login-btn">
-          <i class="fa-brands fa-google"></i> Connect Google Account
-        </button>
+        <a id="google-login-btn" href="/api/auth/google/login" class="google-login-btn">
+          <i class="fa-brands fa-google"></i> Sign in with Google
+        </a>
         <span id="google-status-badge" class="google-status-badge hidden">
           <i class="fa-solid fa-circle-check"></i> Google Connected
+          <button id="google-logout-btn" class="google-logout-btn" title="Disconnect Google Account"><i class="fa-solid fa-xmark"></i></button>
         </span>
       </div>
     </header>
 
-    <!-- Google Device Login Modal -->
-    <div id="google-modal" class="google-modal hidden">
-      <div class="google-modal-box">
-        <button id="close-google-modal" class="close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
-        <i class="fa-brands fa-google google-modal-icon"></i>
-        <h3>Connect Google Account</h3>
-        <p>Sign in with your Gmail account to bypass YouTube age restrictions & bot checks permanently.</p>
-        
-        <div id="google-auth-steps" class="google-auth-steps hidden">
-          <div class="step-box">
-            <span class="step-num">1</span>
-            <span>Open <a id="google-auth-link" href="https://www.google.com/device" target="_blank" rel="noopener">google.com/device</a></span>
-          </div>
-          <div class="step-box">
-            <span class="step-num">2</span>
-            <span>Enter Code: <strong id="google-user-code">----</strong></span>
-          </div>
-          <div class="step-box">
-            <span class="step-num">3</span>
-            <span>Click <strong>Allow</strong> on Google</span>
-          </div>
-        </div>
-
-        <button id="start-google-login-btn" class="start-google-btn">
-          <i class="fa-solid fa-link"></i> Generate Device Login Code
-        </button>
-        <p id="google-modal-msg" class="google-modal-msg"></p>
-      </div>
-    </div>
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden"></div>
 
     <!-- Main Downloader Card -->
     <main class="downloader-card">

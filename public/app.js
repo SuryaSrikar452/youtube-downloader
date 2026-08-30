@@ -481,100 +481,55 @@ function handleApiError(error) {
   }
 }
 
-// Google Auth Integration
-const googleLoginBtn = document.getElementById('google-login-btn');
+// ── Google Auth (OAuth2 Web Flow) ───────────────────────────────────────────
+const googleLoginBtn    = document.getElementById('google-login-btn');
 const googleStatusBadge = document.getElementById('google-status-badge');
-const googleModal = document.getElementById('google-modal');
-const closeGoogleModal = document.getElementById('close-google-modal');
-const startGoogleLoginBtn = document.getElementById('start-google-login-btn');
-const googleAuthSteps = document.getElementById('google-auth-steps');
-const googleUserCode = document.getElementById('google-user-code');
-const googleAuthLink = document.getElementById('google-auth-link');
-const googleModalMsg = document.getElementById('google-modal-msg');
+const googleLogoutBtn   = document.getElementById('google-logout-btn');
+const toast             = document.getElementById('toast');
 
-let googlePollInterval = null;
+function showToast(message, type = 'success') {
+  if (!toast) return;
+  toast.textContent = message;
+  toast.className = `toast toast-${type}`;
+  setTimeout(() => { toast.className = 'toast hidden'; }, 4000);
+}
 
 async function checkGoogleAuthStatus() {
   try {
     const res = await fetch('/api/auth/google-status');
     if (!res.ok) return;
-    const data = await res.json();
-    if (data.isLoggedIn) {
-      googleLoginBtn.classList.add('hidden');
-      googleStatusBadge.classList.remove('hidden');
-      if (googlePollInterval) clearInterval(googlePollInterval);
-    } else {
-      googleLoginBtn.classList.remove('hidden');
-      googleStatusBadge.classList.add('hidden');
-    }
+    const { isLoggedIn } = await res.json();
+    if (googleLoginBtn)    googleLoginBtn.classList.toggle('hidden', isLoggedIn);
+    if (googleStatusBadge) googleStatusBadge.classList.toggle('hidden', !isLoggedIn);
   } catch (err) {
     console.error('Google status check failed:', err);
   }
 }
 
-if (googleLoginBtn) {
-  googleLoginBtn.addEventListener('click', () => {
-    googleModal.classList.remove('hidden');
-  });
-}
-
-if (closeGoogleModal) {
-  closeGoogleModal.addEventListener('click', () => {
-    googleModal.classList.add('hidden');
-  });
-}
-
-if (startGoogleLoginBtn) {
-  startGoogleLoginBtn.addEventListener('click', async () => {
-    startGoogleLoginBtn.disabled = true;
-    startGoogleLoginBtn.innerText = 'Connecting to Google...';
-    googleModalMsg.innerText = '';
-
-    try {
-      const res = await fetch('/api/auth/google-start', { method: 'POST' });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || 'Failed to start Google login.');
-
-      if (data.status === 'already_authenticated') {
-        googleModalMsg.innerText = 'Your Google Account is already connected!';
-        checkGoogleAuthStatus();
-        setTimeout(() => googleModal.classList.add('hidden'), 1500);
-        return;
-      }
-
-      if (data.user_code && data.verification_url) {
-        googleUserCode.innerText = data.user_code;
-        googleAuthLink.href = data.verification_url;
-        googleAuthSteps.classList.remove('hidden');
-        startGoogleLoginBtn.classList.add('hidden');
-        googleModalMsg.innerText = 'Waiting for you to complete sign-in on Google...';
-
-        // Poll for completion
-        if (googlePollInterval) clearInterval(googlePollInterval);
-        googlePollInterval = setInterval(async () => {
-          const statusRes = await fetch('/api/auth/google-status');
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            if (statusData.isLoggedIn) {
-              clearInterval(googlePollInterval);
-              googleModalMsg.innerText = '🎉 Google Account Connected Successfully!';
-              checkGoogleAuthStatus();
-              setTimeout(() => googleModal.classList.add('hidden'), 2000);
-            }
-          }
-        }, 3000);
-      }
-    } catch (err) {
-      googleModalMsg.innerText = err.message;
-      startGoogleLoginBtn.disabled = false;
-      startGoogleLoginBtn.innerText = 'Generate Device Login Code';
-    }
+// Logout button — unlinks Google account
+if (googleLogoutBtn) {
+  googleLogoutBtn.addEventListener('click', async () => {
+    await fetch('/api/auth/google-logout', { method: 'POST' });
+    checkGoogleAuthStatus();
+    showToast('Google account disconnected.', 'info');
   });
 }
 
 // Initial rendering on page load
 window.addEventListener('DOMContentLoaded', async () => {
+  // Handle Google OAuth callback result in URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('google_auth')) {
+    // Clean URL without reloading
+    window.history.replaceState({}, document.title, '/');
+    if (params.get('google_auth') === 'success') {
+      showToast('✅ Google account connected! Age-restricted videos will now download.', 'success');
+    } else {
+      const reason = params.get('reason') || 'Unknown error';
+      showToast(`❌ Google sign-in failed: ${reason}`, 'error');
+    }
+  }
+
   // Check session authorization status
   try {
     const res = await fetch('/api/auth-check');

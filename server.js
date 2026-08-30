@@ -9,6 +9,7 @@ const validate = require('./lib/validate');
 const infoCache = require('./lib/infoCache');
 const downloadQueue = require('./lib/downloadQueue');
 const ytEngine = require('./lib/ytEngine');
+const googleAuth = require('./lib/googleAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -103,24 +104,49 @@ app.get('/api/auth-check', (req, res) => {
   res.json({ authenticated: false });
 });
 
-// 3. Google Device Login Endpoints
-app.post('/api/auth/google-start', requireAuth, async (req, res) => {
+// 3. Google OAuth2 Web Flow Endpoints
+
+// Step 1: Redirect user to Google's login page
+app.get('/api/auth/google/login', requireAuth, (req, res) => {
+  if (!googleAuth.isConfigured()) {
+    return res.status(503).send('Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render environment variables.');
+  }
+  const url = googleAuth.getAuthUrl();
+  res.redirect(url);
+});
+
+// Step 2: Google redirects back here with ?code=... after user signs in
+// NOTE: This route is intentionally NOT behind requireAuth because Google redirects here externally.
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error) {
+    console.error('[Google OAuth Callback Error]:', error);
+    return res.redirect('/?google_auth=error&reason=' + encodeURIComponent(error));
+  }
+  if (!code) {
+    return res.redirect('/?google_auth=error&reason=no_code');
+  }
   try {
-    const data = await ytEngine.startGoogleLogin();
-    res.json(data);
+    await googleAuth.exchangeCode(code);
+    ytEngine.resetInstance(); // Force Innertube to rebuild with new credentials
+    console.log('[Google OAuth] Sign-in complete. Tokens saved.');
+    res.redirect('/?google_auth=success');
   } catch (err) {
-    console.error('[Google Login Start Error]:', err);
-    res.status(500).json({ error: err.message || 'Failed to start Google login.' });
+    console.error('[Google OAuth Callback Error]:', err);
+    res.redirect('/?google_auth=error&reason=' + encodeURIComponent(err.message));
   }
 });
 
-app.get('/api/auth/google-status', requireAuth, async (req, res) => {
-  try {
-    const status = await ytEngine.getGoogleStatus();
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Status check: is Google account currently linked?
+app.get('/api/auth/google-status', requireAuth, (req, res) => {
+  res.json({ isLoggedIn: googleAuth.isAuthenticated() });
+});
+
+// Logout: unlink Google account
+app.post('/api/auth/google-logout', requireAuth, (req, res) => {
+  googleAuth.logout();
+  ytEngine.resetInstance();
+  res.json({ ok: true });
 });
 
 // Serve frontend static files AFTER auth verification check (except index.html, JS/CSS assets)
