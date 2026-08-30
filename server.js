@@ -130,7 +130,12 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
   console.log(`[Fetch Info] Spawning yt-dlp to resolve metadata for: ${videoId}`);
-  const child = spawn(ytDlpPath, ['-j', '--no-playlist', videoUrl]);
+  const child = spawn(ytDlpPath, [
+    '-j', 
+    '--no-playlist', 
+    '--extractor-args', 'youtube:player_client=ios,android,web_creator',
+    videoUrl
+  ]);
 
   let stdout = '';
   let stderr = '';
@@ -284,6 +289,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '-x', '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--no-playlist',
+      '--extractor-args', 'youtube:player_client=ios,android,web_creator',
       '-o', '-',
       videoUrl
     ];
@@ -354,6 +360,7 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
       '--no-playlist',
       '--no-part',
       '--merge-output-format', 'mp4',
+      '--extractor-args', 'youtube:player_client=ios,android,web_creator',
       '-o', tempPath,
       videoUrl
     ];
