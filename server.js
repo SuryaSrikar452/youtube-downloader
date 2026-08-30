@@ -12,6 +12,19 @@ const downloadQueue = require('./lib/downloadQueue');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Write YouTube cookies to a temp file if the env variable is set.
+// This is the most reliable way to bypass datacenter IP bot detection.
+let COOKIES_FILE_PATH = null;
+if (process.env.YOUTUBE_COOKIES) {
+  try {
+    COOKIES_FILE_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
+    fs.writeFileSync(COOKIES_FILE_PATH, process.env.YOUTUBE_COOKIES, 'utf8');
+    console.log('[Auth] YouTube cookies loaded from environment variable.');
+  } catch (err) {
+    console.error('[Auth] Failed to write cookies file:', err);
+  }
+}
+
 // Security Setup: Dynamic startup secrets
 const SERVER_SECRET = crypto.randomBytes(32).toString('hex');
 const VALID_TOKEN = crypto.createHmac('sha256', SERVER_SECRET).update('jahnavireddy').digest('hex');
@@ -130,12 +143,14 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
   console.log(`[Fetch Info] Spawning yt-dlp to resolve metadata for: ${videoId}`);
-  const child = spawn(ytDlpPath, [
-    '-j', 
-    '--no-playlist', 
+  const infoArgs = [
+    '-j',
+    '--no-playlist',
     '--extractor-args', 'youtube:player_client=tv,web_safari',
-    videoUrl
-  ]);
+  ];
+  if (COOKIES_FILE_PATH) infoArgs.push('--cookies', COOKIES_FILE_PATH);
+  infoArgs.push(videoUrl);
+  const child = spawn(ytDlpPath, infoArgs);
 
   let stdout = '';
   let stderr = '';
@@ -298,6 +313,10 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
     if (ffmpegPath) {
       args.push('--ffmpeg-location', ffmpegPath);
     }
+    // Inject cookies if available
+    if (COOKIES_FILE_PATH) {
+      args.push('--cookies', COOKIES_FILE_PATH);
+    }
 
     console.log(`[Download] Starting audio stream for job ${slotStatus.queueId}. format: ${format}`);
     res.setHeader('Content-Type', contentType);
@@ -368,6 +387,10 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
     // Inject ffmpeg-static if available
     if (ffmpegPath) {
       args.push('--ffmpeg-location', ffmpegPath);
+    }
+    // Inject cookies if available
+    if (COOKIES_FILE_PATH) {
+      args.push('--cookies', COOKIES_FILE_PATH);
     }
 
     console.log(`[Download] Starting video download to temp file for job ${slotStatus.queueId}. format: ${format}`);
