@@ -13,30 +13,11 @@ const ytEngine = require('./lib/ytEngine');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Write YouTube cookies to a temp file if the env variable is set.
-// Supports both raw Netscape cookie text and Base64-encoded string for clean env variable storage.
-let COOKIES_FILE_PATH = null;
-if (process.env.YOUTUBE_COOKIES) {
-  try {
-    let cookieContent = process.env.YOUTUBE_COOKIES.trim();
+const cookies = require('./lib/cookies');
 
-    // Auto-detect base64 string
-    if (!cookieContent.includes('\n') && !cookieContent.includes('\t') && cookieContent.length > 50 && /^[A-Za-z0-9+/=]+$/.test(cookieContent)) {
-      cookieContent = Buffer.from(cookieContent, 'base64').toString('utf8');
-    }
+// Initialize cookies on startup
+cookies.initCookies();
 
-    // Ensure Netscape cookie header exists
-    if (!cookieContent.startsWith('# Netscape HTTP Cookie File')) {
-      cookieContent = '# Netscape HTTP Cookie File\n' + cookieContent;
-    }
-
-    COOKIES_FILE_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
-    fs.writeFileSync(COOKIES_FILE_PATH, cookieContent, 'utf8');
-    console.log('[Auth] YouTube cookies loaded and formatted successfully.');
-  } catch (err) {
-    console.error('[Auth] Failed to write cookies file:', err);
-  }
-}
 
 // Security Setup: Dynamic startup secrets
 const SERVER_SECRET = crypto.randomBytes(32).toString('hex');
@@ -183,95 +164,145 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     console.log(`[oEmbed Fallback] oEmbed failed, falling back to yt-dlp...`, oembedErr.message);
   }
 
-  // 2. Slow Fallback: yt-dlp spawn
+  // 2. Slow Fallback: yt-dlp spawn with 2-attempt client chain
   const ytDlpPath = binaries.getYtDlpPath();
   console.log(`[Fetch Info] Spawning yt-dlp to resolve metadata for: ${videoId}`);
-  const infoArgs = [
-    '-j',
-    '--no-playlist',
-    '--geo-bypass',
-    '--no-check-certificates',
-    '--js-runtimes', 'node',
-  ];
-  if (COOKIES_FILE_PATH) infoArgs.push('--cookies', COOKIES_FILE_PATH);
-  infoArgs.push(videoUrl);
-  const child = spawn(ytDlpPath, infoArgs);
+
+  const runInfoYtDlp = (useCookies, playerClient) => {
+    return new Promise((resolve, reject) => {
+      const infoArgs = [
+        '-j',
+        '--no-playlist',
+        '--geo-bypass',
+        '--no-check-certificates',
+        '--js-runtimes', 'node',
+        '--extractor-args', `youtube:player_client=${playerClient}`,
+      ];
+      const cookiesPath = cookies.getCookiesPath();
+      if (useCookies && cookiesPath) infoArgs.push('--cookies', cookiesPath);
+      infoArgs.push(videoUrl);
+
+      const child = spawn(ytDlpPath, infoArgs);
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data;
+      });
+
+      child.stderr.on('data', (data) => {
+        stderr += data;
+      });
+
+      const timeoutId = setTimeout(() => {
+        child.kill();
+        reject(new Error('Request timed out while retrieving video information.'));
+      }, 25000);
+
+      child.on('close', (code) => {
+        clearTimeout(timeoutId);
+        if (code !== 0) {
+          reject(new Error(stderr || `Process exited with code ${code}`));
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      child.on('error', (err) => reject(err));
+    });
+  };
 
   let stdout = '';
-  let stderr = '';
+  let success = false;
+  let activeClient = 'android';
+  let cookiesUsed = false;
+  let finalError = null;
 
-  child.stdout.on('data', (data) => {
-    stdout += data;
-  });
+  try {
+    console.log(`[Fetch Info] Attempting metadata fetch for videoId: ${videoId} using client: android, no cookies`);
+    stdout = await runInfoYtDlp(false, 'android');
+    success = true;
+    activeClient = 'android';
+    cookiesUsed = false;
+  } catch (err1) {
+    console.warn(`[Fetch Info] Android client metadata fetch failed for videoId: ${videoId}. Error: ${err1.message}`);
+    finalError = err1;
 
-  child.stderr.on('data', (data) => {
-    stderr += data;
-  });
-
-  const timeoutId = setTimeout(() => {
-    child.kill();
-    res.status(504).json({ error: 'Request timed out while retrieving video information.' });
-  }, 25000);
-
-  child.on('close', (code) => {
-    clearTimeout(timeoutId);
-    if (res.headersSent) return;
-
-    if (code !== 0) {
-      console.error(`[Fetch Info] yt-dlp error code ${code} for video ${videoId}`);
-      console.error(`[Fetch Info] stderr: ${stderr}`);
-      const friendlyMessage = getFriendlyError(stderr);
-      return res.status(500).json({ error: friendlyMessage });
-    }
+    console.log(`[Fetch Info] Waiting 1.5s before retry...`);
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     try {
-      const info = JSON.parse(stdout);
-
-      const maxResolution = info.height || 720;
-      const title = info.title || 'YouTube Video';
-      const thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails.length ? info.thumbnails[info.thumbnails.length - 1].url : '');
-      const duration = info.duration || 0; // seconds
-      const uploader = info.uploader || 'Unknown Channel';
-
-      // Define standard format options available to the client based on maxResolution
-      const formats = [];
-
-      if (maxResolution >= 1080) {
-        formats.push({ id: '1080p', label: '1080p Full HD (MP4)', ext: 'mp4', type: 'video' });
-      }
-      if (maxResolution >= 720) {
-        formats.push({ id: '720p', label: '720p HD (MP4)', ext: 'mp4', type: 'video' });
-      }
-      if (maxResolution >= 480) {
-        formats.push({ id: '480p', label: '480p (MP4)', ext: 'mp4', type: 'video' });
-      }
-      formats.push({ id: '360p', label: '360p (MP4)', ext: 'mp4', type: 'video' });
-      formats.push({ id: 'mp3', label: 'MP3 Audio (Highest Quality)', ext: 'mp3', type: 'audio' });
-
-      const responseData = {
-        videoId,
-        title,
-        thumbnail,
-        duration,
-        uploader,
-        formats
-      };
-
-      // Cache details for 10 minutes
-      infoCache.set(videoId, responseData);
-      res.json(responseData);
-    } catch (parseError) {
-      console.error('[Fetch Info] JSON Parse Error:', parseError);
-      res.status(500).json({ error: 'Failed to process video metadata.' });
+      const cookiesPath = cookies.getCookiesPath();
+      const useCookies = !!cookiesPath;
+      console.log(`[Fetch Info] Retrying metadata fetch for videoId: ${videoId} using client: web,tv, cookies: ${useCookies}`);
+      stdout = await runInfoYtDlp(useCookies, 'web,tv');
+      success = true;
+      activeClient = 'web,tv';
+      cookiesUsed = useCookies;
+    } catch (err2) {
+      console.error(`[Fetch Info] Web/TV client metadata fetch failed for videoId: ${videoId}. Error: ${err2.message}`);
+      finalError = err2;
     }
-  });
+  }
+
+  if (res.headersSent) return;
+
+  if (!success) {
+    const friendlyMessage = getFriendlyError(finalError ? finalError.message : '');
+    console.error(`[Fetch Info] All metadata fetch attempts failed for videoId: ${videoId}. Error: ${friendlyMessage}`);
+    return res.status(500).json({ error: friendlyMessage });
+  }
+
+  const cookieStr = cookiesUsed ? 'with cookies' : 'no cookies';
+  console.log(`[Fetch Info] Succeeded via ${activeClient} client, ${cookieStr}`);
+
+  try {
+    const info = JSON.parse(stdout);
+
+    const maxResolution = info.height || 720;
+    const title = info.title || 'YouTube Video';
+    const thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails.length ? info.thumbnails[info.thumbnails.length - 1].url : '');
+    const duration = info.duration || 0; // seconds
+    const uploader = info.uploader || 'Unknown Channel';
+
+    // Define standard format options available to the client based on maxResolution
+    const formats = [];
+
+    if (maxResolution >= 1080) {
+      formats.push({ id: '1080p', label: '1080p Full HD (MP4)', ext: 'mp4', type: 'video' });
+    }
+    if (maxResolution >= 720) {
+      formats.push({ id: '720p', label: '720p HD (MP4)', ext: 'mp4', type: 'video' });
+    }
+    if (maxResolution >= 480) {
+      formats.push({ id: '480p', label: '480p (MP4)', ext: 'mp4', type: 'video' });
+    }
+    formats.push({ id: '360p', label: '360p (MP4)', ext: 'mp4', type: 'video' });
+    formats.push({ id: 'mp3', label: 'MP3 Audio (Highest Quality)', ext: 'mp3', type: 'audio' });
+
+    const responseData = {
+      videoId,
+      title,
+      thumbnail,
+      duration,
+      uploader,
+      formats
+    };
+
+    // Cache details for 10 minutes
+    infoCache.set(videoId, responseData);
+    res.json(responseData);
+  } catch (parseError) {
+    console.error('[Fetch Info] JSON Parse Error:', parseError);
+    res.status(500).json({ error: 'Failed to process video metadata.' });
+  }
 });
 
 // Helper for error translation
 function getFriendlyError(stderr) {
   const err = stderr.toLowerCase();
   if (err.includes('sign in to confirm') || err.includes('confirm your age') || err.includes('bot')) {
-    return 'This video requires authentication or age verification. YouTube restricts automated access for this video.';
+    return 'YouTube session expired or cookies invalid — re-export cookies and update the Render Secret File at /etc/secrets/cookies.txt';
   }
   if (err.includes('private video')) {
     return 'This video is private and cannot be accessed.';
