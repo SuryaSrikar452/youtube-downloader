@@ -231,12 +231,16 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     console.log(`[Fetch Info] Waiting 1.5s before retry...`);
     await new Promise(resolve => setTimeout(resolve, 1500));
 
+    let tempCookiesPath = null;
     try {
       const freshCookiesPath = cookies.getCookiesPath();
-      const useCookies = !!freshCookiesPath;
+      if (freshCookiesPath) {
+        tempCookiesPath = path.join(os.tmpdir(), `cookies_info_${videoId}_${Date.now()}.txt`);
+        fs.copyFileSync(freshCookiesPath, tempCookiesPath);
+      }
       
       console.log(`[Fetch Info] Preparing Attempt 2 (web,tv with cookies) diagnostics:`);
-      cookies.logCookieDiagnostics(freshCookiesPath);
+      cookies.logCookieDiagnostics(tempCookiesPath || freshCookiesPath);
       
       const attempt2Args = [
         '-j',
@@ -246,11 +250,11 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
         '--js-runtimes', 'node',
         '--extractor-args', 'youtube:player_client=web,tv',
       ];
-      if (useCookies && freshCookiesPath) attempt2Args.push('--cookies', freshCookiesPath);
+      if (tempCookiesPath) attempt2Args.push('--cookies', tempCookiesPath);
       attempt2Args.push(videoUrl);
 
       console.log(`[Fetch Info] Spawning yt-dlp with exact command array:`, [ytDlpPath, ...attempt2Args]);
-      console.log(`[Fetch Info] Retrying metadata fetch for videoId: ${videoId} using client: web,tv, cookies: ${useCookies}`);
+      console.log(`[Fetch Info] Retrying metadata fetch for videoId: ${videoId} using client: web,tv, cookies: ${!!tempCookiesPath}`);
       
       stdout = await new Promise((resolve, reject) => {
         const child = spawn(ytDlpPath, attempt2Args);
@@ -272,10 +276,19 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
       
       success = true;
       activeClient = 'web,tv';
-      cookiesUsed = useCookies;
+      cookiesUsed = !!tempCookiesPath;
     } catch (err2) {
       console.error(`[Fetch Info] Web/TV client metadata fetch failed for videoId: ${videoId}. Error: ${err2.message}`);
       finalError = err2;
+    } finally {
+      if (tempCookiesPath && fs.existsSync(tempCookiesPath)) {
+        try {
+          fs.unlinkSync(tempCookiesPath);
+          console.log(`[Fetch Info] Cleaned up temporary request-scoped cookie file: ${tempCookiesPath}`);
+        } catch (e) {
+          console.error(`[Fetch Info] Failed to delete temp cookie file ${tempCookiesPath}:`, e);
+        }
+      }
     }
   }
 
