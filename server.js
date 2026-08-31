@@ -232,10 +232,44 @@ app.get('/api/info', requireAuth, rateLimit(20, 60 * 1000), async (req, res) => 
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     try {
-      const cookiesPath = cookies.getCookiesPath();
-      const useCookies = !!cookiesPath;
+      const freshCookiesPath = cookies.getCookiesPath();
+      const useCookies = !!freshCookiesPath;
+      
+      console.log(`[Fetch Info] Preparing Attempt 2 (web,tv with cookies) diagnostics:`);
+      cookies.logCookieDiagnostics(freshCookiesPath);
+      
+      const attempt2Args = [
+        '-j',
+        '--no-playlist',
+        '--geo-bypass',
+        '--no-check-certificates',
+        '--js-runtimes', 'node',
+        '--extractor-args', 'youtube:player_client=web,tv',
+      ];
+      if (useCookies && freshCookiesPath) attempt2Args.push('--cookies', freshCookiesPath);
+      attempt2Args.push(videoUrl);
+
+      console.log(`[Fetch Info] Spawning yt-dlp with exact command array:`, [ytDlpPath, ...attempt2Args]);
       console.log(`[Fetch Info] Retrying metadata fetch for videoId: ${videoId} using client: web,tv, cookies: ${useCookies}`);
-      stdout = await runInfoYtDlp(useCookies, 'web,tv');
+      
+      stdout = await new Promise((resolve, reject) => {
+        const child = spawn(ytDlpPath, attempt2Args);
+        let out = '';
+        let err = '';
+        child.stdout.on('data', d => out += d.toString());
+        child.stderr.on('data', d => err += d.toString());
+        const timeoutId = setTimeout(() => {
+          child.kill();
+          reject(new Error('Request timed out while retrieving video information.'));
+        }, 25000);
+        child.on('close', code => {
+          clearTimeout(timeoutId);
+          if (code !== 0) reject(new Error(err || `Process exited with code ${code}`));
+          else resolve(out);
+        });
+        child.on('error', e => reject(e));
+      });
+      
       success = true;
       activeClient = 'web,tv';
       cookiesUsed = useCookies;
@@ -384,8 +418,45 @@ app.get('/api/download', requireAuth, rateLimit(10, 60 * 1000), async (req, res)
   }
 });
 
+async function runCookieSelfTest() {
+  const cookiesPath = cookies.getCookiesPath();
+  if (!cookiesPath) {
+    console.log('[Cookie Self-Test] Skipped: No cookies configured (neither /etc/secrets/cookies.txt exists nor YOUTUBE_COOKIES env var is set).');
+    return;
+  }
+  
+  console.log(`[Cookie Self-Test] Testing cookies at: ${cookiesPath}`);
+  const ytDlpPath = binaries.getYtDlpPath();
+  const testVideoUrl = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+  
+  const args = [
+    '--cookies', cookiesPath,
+    '--skip-download',
+    '--simulate',
+    testVideoUrl
+  ];
+  
+  const child = spawn(ytDlpPath, args);
+  let stderr = '';
+  child.stderr.on('data', d => stderr += d.toString());
+  
+  const success = await new Promise((resolve) => {
+    child.on('close', code => resolve(code === 0));
+    child.on('error', () => resolve(false));
+  });
+  
+  if (success) {
+    console.log('[Cookie Self-Test] SUCCESS: Cookie file successfully parsed and validated by yt-dlp.');
+  } else {
+    console.error(`[Cookie Self-Test] FAILURE: Cookie file is non-functional (corrupted, expired, or invalid format) for yt-dlp. Stderr: ${stderr.trim()}`);
+  }
+}
+
 // Initialize binaries on startup
-binaries.ensureBinaries().then(() => {
+binaries.ensureBinaries().then(async () => {
+  // Run startup self-test
+  await runCookieSelfTest();
+
   app.listen(PORT, () => {
     console.log(`==================================================`);
     console.log(`YouTube Downloader server running at http://localhost:${PORT}`);
